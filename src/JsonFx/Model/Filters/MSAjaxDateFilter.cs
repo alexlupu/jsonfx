@@ -38,145 +38,171 @@ using JsonFx.Serialization;
 
 namespace JsonFx.Model.Filters
 {
-	/// <summary>
-	/// Defines a filter for JSON-style serialization of DateTime into an ASP.NET Ajax Date string.
-	/// </summary>
-	/// <remarks>
-	/// This is the format used by Microsoft ASP.NET Ajax:
-	///		http://weblogs.asp.net/bleroy/archive/2008/01/18/dates-and-json.aspx
-	///	
-	/// NOTE: This format is limited to expressing DateTime at the millisecond level as UTC only.
-	/// The WCF extension of adding a timezone is ignored as this returns UTC dates only.
-	/// </remarks>
-	public class MSAjaxDateFilter : ModelFilter<DateTime>
-	{
-		#region Constants
+    /// <summary>
+    /// Defines a filter for JSON-style serialization of DateTime into an ASP.NET Ajax Date string.
+    /// </summary>
+    /// <remarks>
+    /// This is the format used by Microsoft ASP.NET Ajax:
+    ///		http://weblogs.asp.net/bleroy/archive/2008/01/18/dates-and-json.aspx
+    ///	
+    /// NOTE: This format is limited to expressing DateTime at the millisecond level as UTC only.
+    /// The WCF extension of adding a timezone is ignored as this returns UTC dates only.
+    /// </remarks>
+    public class MSAjaxDateFilter : ModelFilter<DateTime>
+    {
+        #region Constants
 
-		private static readonly DateTime EcmaScriptEpoch = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
-		private const long MinValueMilliseconds = -62135596800000L;
-		private const long MaxValueMilliseconds = 253402300800000L;
+        private static readonly DateTime EcmaScriptEpoch = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc);
+        private const long MinValueMilliseconds = -62135596800000L;
+        private const long MaxValueMilliseconds = 253402300800000L;
 
-		private const string MSAjaxDatePattern = @"^/Date\(([+\-]?\d+?)([+\-]\d{4})?\)/$";
-		private static readonly Regex MSAjaxDateRegex = new Regex(MSAjaxDatePattern,
+        private const string MSAjaxDatePattern = @"^/Date\(([+\-]?\d+?)([+\-]\d{4})?\)/$";
+        private static readonly Regex MSAjaxDateRegex = new Regex(MSAjaxDatePattern,
 #if !SILVERLIGHT
-			RegexOptions.Compiled|
+ RegexOptions.Compiled |
 #endif
-			RegexOptions.CultureInvariant|RegexOptions.ECMAScript);
+ RegexOptions.CultureInvariant | RegexOptions.ECMAScript);
 
-		private const string MSAjaxDatePrefix = @"/Date(";
-		private const string MSAjaxDateSuffix = @")/";
+        private const string MSAjaxDatePrefix = @"/Date(";
+        private const string MSAjaxDateSuffix = @")/";
+        private readonly bool _appendLocalTimeZone;
 
-		#endregion Constants
+        #endregion Constants
 
-		#region IDataFilter<DataTokenType,DateTime> Members
+        #region Constructors
+        public MSAjaxDateFilter()
+        {
+            _appendLocalTimeZone = false;
+        }
 
-		public override bool TryRead(DataReaderSettings settings, IStream<Token<ModelTokenType>> tokens, out DateTime value)
-		{
-			Token<ModelTokenType> token = tokens.Peek();
-			if (token == null ||
-				token.TokenType != ModelTokenType.Primitive ||
-				!(token.Value is string))
-			{
-				value = default(DateTime);
-				return false;
-			}
+        public MSAjaxDateFilter(bool appendLocalTimeZone)
+        {
+            // add the local computer's timezone, not that of the DateTime origin.
+            _appendLocalTimeZone = appendLocalTimeZone;
+        }
 
-			if (!MSAjaxDateFilter.TryParseMSAjaxDate(
-				token.ValueAsString(),
-				out value))
-			{
-				value = default(DateTime);
-				return false;
-			}
+        #endregion
 
-			tokens.Pop();
-			return true;
-		}
+        #region IDataFilter<DataTokenType,DateTime> Members
 
-		public override bool TryWrite(DataWriterSettings settings, DateTime value, out IEnumerable<Token<ModelTokenType>> tokens)
-		{
-			tokens = new Token<ModelTokenType>[]
+        public override bool TryRead(DataReaderSettings settings, IStream<Token<ModelTokenType>> tokens, out DateTime value)
+        {
+            Token<ModelTokenType> token = tokens.Peek();
+            if (token == null ||
+                token.TokenType != ModelTokenType.Primitive ||
+                !(token.Value is string))
+            {
+                value = default(DateTime);
+                return false;
+            }
+
+            if (!MSAjaxDateFilter.TryParseMSAjaxDate(
+                token.ValueAsString(),
+                out value))
+            {
+                value = default(DateTime);
+                return false;
+            }
+
+            tokens.Pop();
+            return true;
+        }
+
+        public override bool TryWrite(DataWriterSettings settings, DateTime value, out IEnumerable<Token<ModelTokenType>> tokens)
+        {
+            tokens = new Token<ModelTokenType>[]
 				{
 					ModelGrammar.TokenPrimitive(this.FormatMSAjaxDate(value))
 				};
 
-			return true;
-		}
+            return true;
+        }
 
-		#endregion IDataFilter<DataTokenType,DateTime> Members
+        #endregion IDataFilter<DataTokenType,DateTime> Members
 
-		#region Utility Methods
+        #region Utility Methods
 
-		/// <summary>
-		/// Converts an ASP.NET Ajax date string to the corresponding DateTime representation
-		/// </summary>
-		/// <param name="date">ASP.NET Ajax date string</param>
-		/// <param name="value"></param>
-		/// <returns>true if parsing was successful</returns>
-		internal static bool TryParseMSAjaxDate(string date, out DateTime value)
-		{
-			if (String.IsNullOrEmpty(date))
-			{
-				value = default(DateTime);
-				return false;
-			}
+        /// <summary>
+        /// Converts an ASP.NET Ajax date string to the corresponding DateTime representation
+        /// </summary>
+        /// <param name="date">ASP.NET Ajax date string</param>
+        /// <param name="value"></param>
+        /// <returns>true if parsing was successful</returns>
+        internal static bool TryParseMSAjaxDate(string date, out DateTime value)
+        {
+            if (String.IsNullOrEmpty(date))
+            {
+                value = default(DateTime);
+                return false;
+            }
 
-			Match match = MSAjaxDateFilter.MSAjaxDateRegex.Match(date);
+            Match match = MSAjaxDateFilter.MSAjaxDateRegex.Match(date);
 
-			long ticks;
-			if (!match.Success ||
-				!Int64.TryParse(
-					match.Groups[1].Value,
-					NumberStyles.Integer,
-					CultureInfo.InvariantCulture,
-					out ticks))
-			{
-				value = default(DateTime);
-				return false;
-			}
+            long ticks;
+            if (!match.Success ||
+                !Int64.TryParse(
+                    match.Groups[1].Value,
+                    NumberStyles.Integer,
+                    CultureInfo.InvariantCulture,
+                    out ticks))
+            {
+                value = default(DateTime);
+                return false;
+            }
 
-			if (ticks <= MSAjaxDateFilter.MinValueMilliseconds)
-			{
-				value = DateTime.MinValue;
-			}
-			else if (ticks >= MSAjaxDateFilter.MaxValueMilliseconds)
-			{
-				value = DateTime.MaxValue;
-			}
-			else
-			{
-				// currently this just ignores the WCF time zone info in match.Groups[2].Value
-				value = MSAjaxDateFilter.EcmaScriptEpoch.AddMilliseconds(ticks);
-			}
-			return true;
-		}
+            if (ticks <= MSAjaxDateFilter.MinValueMilliseconds)
+            {
+                value = DateTime.MinValue;
+            }
+            else if (ticks >= MSAjaxDateFilter.MaxValueMilliseconds)
+            {
+                value = DateTime.MaxValue;
+            }
+            else
+            {
+                // currently this just ignores the WCF time zone info in match.Groups[2].Value
+                value = MSAjaxDateFilter.EcmaScriptEpoch.AddMilliseconds(ticks);
+            }
+            return true;
+        }
 
-		/// <summary>
-		/// Converts a DateTime to the corresponding ASP.NET Ajax date string representation
-		/// </summary>
-		/// <param name="value"></param>
-		/// <returns>ASP.NET Ajax date string</returns>
-		private string FormatMSAjaxDate(DateTime value)
-		{
-			if (value.Kind == DateTimeKind.Local)
-			{
-				// convert server-local to UTC
-				value = value.ToUniversalTime();
-			}
+        /// <summary>
+        /// Converts a DateTime to the corresponding ASP.NET Ajax date string representation
+        /// </summary>
+        /// <param name="value"></param>
+        /// <returns>ASP.NET Ajax date string</returns>
+        private string FormatMSAjaxDate(DateTime value)
+        {
+            if (value.Kind == DateTimeKind.Local)
+            {
+                // convert server-local to UTC
+                value = value.ToUniversalTime();
+            }
 
-			// find the duration since Jan 1, 1970
-			TimeSpan duration = value.Subtract(MSAjaxDateFilter.EcmaScriptEpoch);
+            // find the duration since Jan 1, 1970
+            TimeSpan duration = value.Subtract(MSAjaxDateFilter.EcmaScriptEpoch);
 
-			// get the total milliseconds
-			long ticks = (long)duration.TotalMilliseconds;
+            // get the total milliseconds
+            long ticks = (long)duration.TotalMilliseconds;
+            string ajaxDate = ticks.ToString();
 
-			// write out as a pseudo Date constructor
-			return String.Concat(
-				MSAjaxDateFilter.MSAjaxDatePrefix,
-				ticks,
-				MSAjaxDateFilter.MSAjaxDateSuffix);
-		}
+            if (_appendLocalTimeZone)
+            {
+                // get the diff between local and UTC
+                TimeZone localZone = TimeZone.CurrentTimeZone;
+                TimeSpan currentOffset = localZone.GetUtcOffset(DateTime.Now);
+                string timezone = string.Format("{0:+00;#-00}{1:00}", currentOffset.Hours, currentOffset.Minutes);
 
-		#endregion Utility Methods
-	}
+                ajaxDate = String.Concat(ajaxDate, timezone);
+            }
+
+            // write out as a pseudo Date constructor
+            return String.Concat(
+                MSAjaxDateFilter.MSAjaxDatePrefix,
+                ajaxDate,
+                MSAjaxDateFilter.MSAjaxDateSuffix);
+        }
+
+        #endregion Utility Methods
+    }
 }

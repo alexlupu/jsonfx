@@ -387,6 +387,27 @@ namespace JsonFx.Model.Filters
 			Assert.Equal(expected[0].Value, actual.First().Value);
 		}
 
+        [Fact]
+        [Trait(TraitName, TraitValue)]
+        public void TryWrite_DateTimeWithLocalTimezoneTest()
+        {
+            // Note: test only valid in Pacific Standard Time
+            var input = new DateTime(2012, 12, 10, 23, 59, 59, 999, DateTimeKind.Utc);
+
+            var expected = new[]
+				{
+					ModelGrammar.TokenPrimitive(@"/Date(1355183999999-0800)/")
+				};
+
+            IEnumerable<Token<ModelTokenType>> actual;
+            Assert.True(new MSAjaxDateFilter(true).TryWrite(new DataWriterSettings(), input, out actual));
+
+            Assert.NotNull(actual);
+            Assert.Equal(expected.Count(), actual.Count());
+            Assert.Equal(expected[0].TokenType, actual.First().TokenType);
+            Assert.Equal(expected[0].Value, actual.First().Value);
+        }
+
 		#endregion TryWrite Tests
 	}
 }
